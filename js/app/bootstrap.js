@@ -3,7 +3,7 @@
   var jqm_mobile_init = false;
 
   var initApp = function() {
-    if (device_ready && jqm_mobile_init) {
+    if ((device_ready && jqm_mobile_init) || (jqm_mobile_init && !mobile_system)) {
       startApp();
     }
   };
