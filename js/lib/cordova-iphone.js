@@ -1,6 +1,6 @@
-// commit 109b8649b0e98597b147842a6f71999d2f7910f2
+// commit 8c46a970a0719d0f16a225b75421ecf6f12dcc02
 
-// File generated at :: Tue Jun 05 2012 14:10:19 GMT-0700 (PDT)
+// File generated at :: Sun Jul 29 2012 14:26:58 GMT-0400 (EDT)
 
 /*
  Licensed to the Apache Software Foundation (ASF) under one
@@ -190,7 +190,9 @@ var cordova = {
     fireDocumentEvent: function(type, data) {
         var evt = createEvent(type, data);
         if (typeof documentEventHandlers[type] != 'undefined') {
-            documentEventHandlers[type].fire(evt);
+            setTimeout(function() {
+                documentEventHandlers[type].fire(evt);
+            }, 0);
         } else {
             document.dispatchEvent(evt);
         }
@@ -198,7 +200,9 @@ var cordova = {
     fireWindowEvent: function(type, data) {
         var evt = createEvent(type,data);
         if (typeof windowEventHandlers[type] != 'undefined') {
-            windowEventHandlers[type].fire(evt);
+            setTimeout(function() {
+                windowEventHandlers[type].fire(evt);
+            }, 0);
         } else {
             window.dispatchEvent(evt);
         }
@@ -285,17 +289,6 @@ var cordova = {
             }
         }
     },
-    // TODO: remove in 2.0.
-    addPlugin: function(name, obj) {
-        console.log("[DEPRECATION NOTICE] window.addPlugin and window.plugins will be removed in version 2.0.");
-        if (!window.plugins[name]) {
-            window.plugins[name] = obj;
-        }
-        else {
-            console.log("Error: Plugin "+name+" already exists.");
-        }
-    },
-
     addConstructor: function(func) {
         channel.onCordovaReady.subscribeOnce(function() {
             try {
@@ -311,51 +304,6 @@ var cordova = {
 channel.onPause = cordova.addDocumentEventHandler('pause');
 channel.onResume = cordova.addDocumentEventHandler('resume');
 channel.onDeviceReady = cordova.addDocumentEventHandler('deviceready');
-
-// Adds deprecation warnings to functions of an object (but only logs a message once)
-function deprecateFunctions(obj, objLabel) {
-    var newObj = {};
-    var logHash = {};
-    for (var i in obj) {
-        if (obj.hasOwnProperty(i)) {
-            if (typeof obj[i] == 'function') {
-                newObj[i] = (function(prop){
-                    var oldFunk = obj[prop];
-                    var funkId = objLabel + '_' + prop;
-                    return function() {
-                        if (!logHash[funkId]) {
-                            console.log('[DEPRECATION NOTICE] The "' + objLabel + '" global will be removed in version 2.0, please use lowercase "cordova".');
-                            logHash[funkId] = true;
-                        }
-                        oldFunk.apply(obj, arguments);
-                    };
-                })(i);
-            } else {
-                newObj[i] = (function(prop) { return obj[prop]; })(i);
-            }
-        }
-    }
-    return newObj;
-}
-
-/**
- * Legacy variable for plugin support
- * TODO: remove in 2.0.
- */
-if (!window.PhoneGap) {
-    window.PhoneGap = deprecateFunctions(cordova, 'PhoneGap');
-}
-if (!window.Cordova) {
-    window.Cordova = deprecateFunctions(cordova, 'Cordova');
-}
-
-/**
- * Plugins object
- * TODO: remove in 2.0.
- */
-if (!window.plugins) {
-    window.plugins = {};
-}
 
 module.exports = cordova;
 
@@ -709,7 +657,6 @@ channel.create('onDestroy');
 
 // Channels that must fire before "deviceready" is fired.
 channel.waitForInitialization('onCordovaReady');
-channel.waitForInitialization('onCordovaInfoReady');
 channel.waitForInitialization('onCordovaConnectionReady');
 
 module.exports = channel;
@@ -844,6 +791,9 @@ module.exports = {
         Coordinates: {
             path: 'cordova/plugin/Coordinates'
         },
+        device: {
+            path: 'cordova/plugin/device'
+        },
         DirectoryEntry: {
             path: 'cordova/plugin/DirectoryEntry'
         },
@@ -936,6 +886,7 @@ var cordova = require('cordova'),
     utils = require('cordova/utils'),
     gapBridge,
     createGapBridge = function() {
+
         gapBridge = document.createElement("iframe");
         gapBridge.setAttribute("style", "display:none;");
         gapBridge.setAttribute("height","0px");
@@ -946,7 +897,7 @@ var cordova = require('cordova'),
     channel = require('cordova/channel');
 
 module.exports = function() {
-    if (!channel.onCordovaInfoReady.fired) {
+    if (!channel.onCordovaReady.fired) {
         utils.alert("ERROR: Attempting to call cordova.exec()" +
               " before 'deviceready'. Ignoring.");
         return;
@@ -975,13 +926,6 @@ module.exports = function() {
         actionArgs = Array.prototype.splice.call(arguments, 1);
     }
 
-    // Start building the command object.
-    var command = {
-        className: service,
-        methodName: action,
-        "arguments": []
-    };
-
     // Register the callbacks and add the callbackId to the positional
     // arguments if given.
     if (successCallback || failCallback) {
@@ -989,20 +933,8 @@ module.exports = function() {
         cordova.callbacks[callbackId] =
             {success:successCallback, fail:failCallback};
     }
-    if (callbackId !== null) {
-        command["arguments"].push(callbackId);
-    }
 
-    for (var i = 0; i < actionArgs.length; ++i) {
-        var arg = actionArgs[i];
-        if (arg === undefined || arg === null) { // nulls are pushed to the args now (becomes NSNull)
-            command["arguments"].push(arg);
-        } else if (typeof(arg) == 'object' && !(utils.isArray(arg))) {
-            command.options = arg;
-        } else {
-            command["arguments"].push(arg);
-        }
-    }
+    var command = [callbackId, service, action, actionArgs];
 
     // Stringify and queue the command. We stringify to command now to
     // effectively clone the command arguments in case they are mutated before
@@ -1042,9 +974,6 @@ module.exports = {
         },
         MediaError: { // exists natively, override
             path: "cordova/plugin/MediaError"
-        },
-        device: {
-            path: 'cordova/plugin/ios/device'
         },
         console: {
             path: 'cordova/plugin/ios/console'
@@ -1199,7 +1128,14 @@ cameraExport.getPicture = function(successCallback, errorCallback, options) {
         popoverOptions = options.popoverOptions;
     }
 
-    exec(successCallback, errorCallback, "Camera", "takePicture", [quality, destinationType, sourceType, targetWidth, targetHeight, encodingType, mediaType, allowEdit, correctOrientation, saveToPhotoAlbum, popoverOptions]);
+    var args = [quality, destinationType, sourceType, targetWidth, targetHeight, encodingType,
+                mediaType, allowEdit, correctOrientation, saveToPhotoAlbum, popoverOptions];
+
+    exec(successCallback, errorCallback, "Camera", "takePicture", args);
+};
+
+cameraExport.cleanup = function(successCallback, errorCallback) {
+    exec(successCallback, errorCallback, "Camera", "cleanup", []);
 };
 
 module.exports = cameraExport;
@@ -1784,7 +1720,7 @@ var utils = require('cordova/utils'),
  * {boolean} isDirectory always true (readonly)
  * {DOMString} name of the directory, excluding the path leading to it (readonly)
  * {DOMString} fullPath the absolute full path to the directory (readonly)
- * {FileSystem} filesystem on which the directory resides (readonly)
+ * TODO: implement this!!! {FileSystem} filesystem on which the directory resides (readonly)
  */
 var DirectoryEntry = function(name, fullPath) {
      DirectoryEntry.__super__.constructor.apply(this, [false, true, name, fullPath]);
@@ -2514,11 +2450,13 @@ var FileSystem = function(name, root) {
 };
 
 module.exports = FileSystem;
+
 });
 
 // file: lib/common/plugin/FileTransfer.js
 define("cordova/plugin/FileTransfer", function(require, exports, module) {
-var exec = require('cordova/exec');
+var exec = require('cordova/exec'),
+    FileTransferError = require('cordova/plugin/FileTransferError');
 
 /**
  * FileTransfer uploads a file to a remote server.
@@ -2537,16 +2475,20 @@ var FileTransfer = function() {};
 * @param trustAllHosts {Boolean} Optional trust all hosts (e.g. for self-signed certs), defaults to false
 */
 FileTransfer.prototype.upload = function(filePath, server, successCallback, errorCallback, options, trustAllHosts) {
+    // sanity parameter checking
+    if (!filePath || !server) throw new Error("FileTransfer.upload requires filePath and server URL parameters at the minimum.");
     // check for options
     var fileKey = null;
     var fileName = null;
     var mimeType = null;
     var params = null;
     var chunkedMode = true;
+    var headers = null;
     if (options) {
         fileKey = options.fileKey;
         fileName = options.fileName;
         mimeType = options.mimeType;
+        headers = options.headers;
         if (options.chunkedMode !== null || typeof options.chunkedMode != "undefined") {
             chunkedMode = options.chunkedMode;
         }
@@ -2558,7 +2500,12 @@ FileTransfer.prototype.upload = function(filePath, server, successCallback, erro
         }
     }
 
-    exec(successCallback, errorCallback, 'FileTransfer', 'upload', [filePath, server, fileKey, fileName, mimeType, params, trustAllHosts, chunkedMode]);
+    var fail = function(e) {
+        var error = new FileTransferError(e.code, e.source, e.target, e.http_status);
+        errorCallback(error);
+    };
+
+    exec(successCallback, fail, 'FileTransfer', 'upload', [filePath, server, fileKey, fileName, mimeType, params, trustAllHosts, chunkedMode, headers]);
 };
 
 /**
@@ -2569,6 +2516,8 @@ FileTransfer.prototype.upload = function(filePath, server, successCallback, erro
  * @param errorCallback {Function}    Callback to be invoked upon error
  */
 FileTransfer.prototype.download = function(source, target, successCallback, errorCallback) {
+    // sanity parameter checking
+    if (!source || !target) throw new Error("FileTransfer.download requires source URI and target URI parameters at the minimum.");
     var win = function(result) {
         var entry = null;
         if (result.isDirectory) {
@@ -2583,6 +2532,12 @@ FileTransfer.prototype.download = function(source, target, successCallback, erro
         entry.fullPath = result.fullPath;
         successCallback(entry);
     };
+
+    var fail = function(e) {
+        var error = new FileTransferError(e.code, e.source, e.target, e.http_status);
+        errorCallback(error);
+    };
+
     exec(win, errorCallback, 'FileTransfer', 'download', [source, target]);
 };
 
@@ -2596,8 +2551,11 @@ define("cordova/plugin/FileTransferError", function(require, exports, module) {
  * FileTransferError
  * @constructor
  */
-var FileTransferError = function(code) {
+var FileTransferError = function(code, source, target, status) {
     this.code = code || null;
+    this.source = source || null;
+    this.target = target || null;
+    this.http_status = status || null;
 };
 
 FileTransferError.FILE_NOT_FOUND_ERR = 1;
@@ -2605,6 +2563,7 @@ FileTransferError.INVALID_URL_ERR = 2;
 FileTransferError.CONNECTION_ERR = 3;
 
 module.exports = FileTransferError;
+
 });
 
 // file: lib/common/plugin/FileUploadOptions.js
@@ -2616,15 +2575,19 @@ define("cordova/plugin/FileUploadOptions", function(require, exports, module) {
  * @param fileName {String}  Filename to be used by the server. Defaults to image.jpg.
  * @param mimeType {String}  Mimetype of the uploaded file. Defaults to image/jpeg.
  * @param params {Object}    Object with key: value params to send to the server.
+ * @param headers {Object}   Keys are header names, values are header values. Multiple
+ *                           headers of the same name are not supported.
  */
-var FileUploadOptions = function(fileKey, fileName, mimeType, params) {
+var FileUploadOptions = function(fileKey, fileName, mimeType, params, headers) {
     this.fileKey = fileKey || null;
     this.fileName = fileName || null;
     this.mimeType = mimeType || null;
     this.params = params || null;
+    this.headers = headers || null;
 };
 
 module.exports = FileUploadOptions;
+
 });
 
 // file: lib/common/plugin/FileUploadResult.js
@@ -3409,12 +3372,12 @@ var accelerometer = {
 
         var p;
         var win = function(a) {
-            successCallback(a);
             removeListeners(p);
+            successCallback(a);
         };
         var fail = function(e) {
-            errorCallback(e);
             removeListeners(p);
+            errorCallback(e);
         };
 
         p = createCallbackPair(win, fail);
@@ -3446,8 +3409,8 @@ var accelerometer = {
         var id = utils.createUUID();
 
         var p = createCallbackPair(function(){}, function(e) {
-            errorCallback(e);
             removeListeners(p);
+            errorCallback(e);
         });
         listeners.push(p);
 
@@ -3462,7 +3425,10 @@ var accelerometer = {
 
         if (running) {
             // If we're already running then immediately invoke the success callback
-            successCallback(accel);
+            // but only if we have retreived a value, sample code does not check for null ...
+            if(accel) {
+                successCallback(accel);
+            }
         } else {
             start();
         }
@@ -3996,6 +3962,74 @@ module.exports = contacts;
 
 });
 
+// file: lib/common/plugin/device.js
+define("cordova/plugin/device", function(require, exports, module) {
+var channel = require('cordova/channel'),
+    utils = require('cordova/utils'),
+    exec = require('cordova/exec');
+
+// Tell cordova channel to wait on the CordovaInfoReady event
+channel.waitForInitialization('onCordovaInfoReady');
+
+/**
+ * This represents the mobile device, and provides properties for inspecting the model, version, UUID of the
+ * phone, etc.
+ * @constructor
+ */
+function Device() {
+    this.available = false;
+    this.platform = null;
+    this.version = null;
+    this.name = null;
+    this.uuid = null;
+    this.cordova = null;
+
+    var me = this;
+
+    channel.onCordovaReady.subscribeOnce(function() {
+        me.getInfo(function(info) {
+            me.available = true;
+            me.platform = info.platform;
+            me.version = info.version;
+            me.name = info.name;
+            me.uuid = info.uuid;
+            me.cordova = info.cordova;
+            channel.onCordovaInfoReady.fire();
+        },function(e) {
+            me.available = false;
+            utils.alert("[ERROR] Error initializing Cordova: " + e);
+        });
+    });
+}
+
+/**
+ * Get device info
+ *
+ * @param {Function} successCallback The function to call when the heading data is available
+ * @param {Function} errorCallback The function to call when there is an error getting the heading data. (OPTIONAL)
+ */
+Device.prototype.getInfo = function(successCallback, errorCallback) {
+
+    // successCallback required
+    if (typeof successCallback !== "function") {
+        console.log("Device Error: successCallback is not a function");
+        return;
+    }
+
+    // errorCallback optional
+    if (errorCallback && (typeof errorCallback !== "function")) {
+        console.log("Device Error: errorCallback is not a function");
+        return;
+    }
+
+    // Get info
+    exec(successCallback, errorCallback, "Device", "getDeviceInfo", []);
+};
+
+module.exports = new Device();
+
+});
+
 // file: lib/common/plugin/geolocation.js
 define("cordova/plugin/geolocation", function(require, exports, module) {
 var utils = require('cordova/utils'),
@@ -4452,42 +4486,6 @@ module.exports = {
 };
 });
 
-// file: lib/ios/plugin/ios/device.js
-define("cordova/plugin/ios/device", function(require, exports, module) {
-/**
- * this represents the mobile device, and provides properties for inspecting the model, version, UUID of the
- * phone, etc.
- * @constructor
- */
-var exec = require('cordova/exec'),
-    utils = require('cordova/utils'),
-    channel = require('cordova/channel');
-
-var Device = function() {
-    this.platform = null;
-    this.version  = null;
-    this.name     = null;
-    this.cordova  = null;
-    this.uuid     = null;
-};
-
-Device.prototype.setInfo = function(info) {
-    try {
-        this.platform = info.platform;
-        this.version = info.version;
-        this.name = info.name;
-        this.cordova = info.cordova;
-        this.uuid = info.uuid;
-        channel.onCordovaInfoReady.fire();
-    } catch(e) {
-        utils.alert('Error during device info setting in cordova/plugin/ios/device!');
-    }
-};
-
-module.exports = new Device();
-
-});
-
 // file: lib/ios/plugin/ios/nativecomm.js
 define("cordova/plugin/ios/nativecomm", function(require, exports, module) {
 var cordova = require('cordova');
@@ -4496,10 +4494,12 @@ var cordova = require('cordova');
  * Called by native code to retrieve all queued commands and clear the queue.
  */
 module.exports = function() {
-  var json = JSON.stringify(cordova.commandQueue);
-  cordova.commandQueue = [];
+  // Each entry in commandQueue is a JSON string already.
+  var json = '[' + cordova.commandQueue.join(',') + ']';
+  cordova.commandQueue.length = 0;
   return json;
 };
+
 });
 
 // file: lib/ios/plugin/ios/notification.js
@@ -4966,6 +4966,9 @@ define("cordova/plugin/splashscreen", function(require, exports, module) {
 var exec = require('cordova/exec');
 
 var splashscreen = {
+    show:function() {
+        exec(null, null, "SplashScreen", "show", []);
+    },
     hide:function() {
         exec(null, null, "SplashScreen", "hide", []);
     }
